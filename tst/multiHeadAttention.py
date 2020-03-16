@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tst.utils import generate_local_map_mask
+from tst.CausalConv1d import CausalConv1d as C_Conv1d
 
 
 class MultiHeadAttention(nn.Module):
@@ -53,8 +54,8 @@ class MultiHeadAttention(nn.Module):
         ########################################
         # ConvMHA
         self.kernel_size = 3  # must be odd
-        self.pad = int(((self.kernel_size - 1) / 2))
-        self.conv1d = nn.Conv1d(d_model, d_model, self.kernel_size, padding=self.pad)
+#         self.pad = int(((self.kernel_size - 1) / 2))
+        self.conv1d = C_Conv1d(d_model, d_model, self.kernel_size)
         ########################################
 
         # Query, keys and value matrices
