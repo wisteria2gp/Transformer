@@ -1,8 +1,3 @@
-
-
-
-## もとのmultiHeadAttentionはdummy_multiHeadAttentionという名前にし
-## こちらはConvMHAにあたる。名前をすり替えることでtransformerやEncoder-Decoder側を帰ること無く動かしている
 from typing import Optional
 
 import numpy as np
@@ -18,7 +13,6 @@ class MultiHeadAttention(nn.Module):
     Given 3 inputs of shape (batch_size, K, d_model), that will be used
     to compute query, keys and values, we output a self attention
     tensor of shape (batch_size, K, d_model).
-    (batch_size , , 入力時の特徴カラム数)
 
     Parameters
     ----------
@@ -33,9 +27,6 @@ class MultiHeadAttention(nn.Module):
     attention_size:
         Number of backward elements to apply attention.
         Deactivated if ``None``. Default is ``None``.
-
-    EncoderDecoderで結局q,k,v=xになる
-    x :  (batch_size, seq_lne, d_model)
     """
 
     def __init__(self,
@@ -50,20 +41,13 @@ class MultiHeadAttention(nn.Module):
         self._h = h
         self._attention_size = attention_size
 
-        ########################################
-        # ConvMHA
-        self.kernel_size = 3  # must be odd
-        self.pad = int(((self.kernel_size - 1) / 2))
-        self.conv1d = nn.Conv1d(d_model, d_model, self.kernel_size, padding=self.pad)
-        ########################################
-
         # Query, keys and value matrices
-        self._W_q = nn.Linear(d_model, q * self._h)  # (in_features,out_features)
-        self._W_k = nn.Linear(d_model, q * self._h)
-        self._W_v = nn.Linear(d_model, v * self._h)
+        self._W_q = nn.Linear(d_model, q*self._h)
+        self._W_k = nn.Linear(d_model, q*self._h)
+        self._W_v = nn.Linear(d_model, v*self._h)
 
         # Output linear function
-        self._W_o = nn.Linear(self._h * v, d_model)
+        self._W_o = nn.Linear(self._h*v, d_model)
 
         # Score placeholder
         self._scores = None
@@ -95,28 +79,22 @@ class MultiHeadAttention(nn.Module):
         -------
             Self attention tensor with shape (batch_size, K, d_model).
         """
-        K = query.shape[1]  # seq_len
+        K = query.shape[1]
 
-        ###############################################
-        # Conv MHA
-        # conv1dは(N,channel,Len)を要求するのでtransposeで対応した後に戻す
-        # (batch_size, seq_lne, d_model)->(N,channel,Len)_>(batch_size, seq_lne, d_model)
-        query = self.conv1d(query.transpose(1, 2)).transpose(1, 2)
-        key = self.conv1d(key.transpose(1, 2)).transpose(1, 2)
-        ###############################################
 
+        
         # Compute Q, K and V, concatenate heads on batch dimension
         queries = torch.cat(self._W_q(query).chunk(self._h, dim=-1), dim=0)
         keys = torch.cat(self._W_k(key).chunk(self._h, dim=-1), dim=0)
         values = torch.cat(self._W_v(value).chunk(self._h, dim=-1), dim=0)
 
         # Scaled Dot Product
-        self._scores = torch.bmm(queries, keys.transpose(1, 2)) / np.sqrt(K)  ##ここまちがってない？d_modelかshunk_sizeな気がする
+        self._scores = torch.bmm(queries, keys.transpose(1, 2)) / np.sqrt(K)
 
         # Compute local map mask
         if self._attention_size is not None:
             attention_mask = generate_local_map_mask(K, self._attention_size, self._scores.device)
-
+            
             self._scores = self._scores.masked_fill(attention_mask, float('-inf'))
 
         # Compute future mask
@@ -189,9 +167,8 @@ class MultiHeadAttentionChunk(MultiHeadAttention):
         self._chunk_size = chunk_size
 
         # Score mask for decoder
-        self._future_mask = nn.Parameter(
-            torch.triu(torch.ones((self._chunk_size, self._chunk_size)), diagonal=1).bool(),
-            requires_grad=False)
+        self._future_mask = nn.Parameter(torch.triu(torch.ones((self._chunk_size, self._chunk_size)), diagonal=1).bool(),
+                                         requires_grad=False)
 
         if self._attention_size is not None:
             self._attention_mask = nn.Parameter(generate_local_map_mask(self._chunk_size, self._attention_size),
@@ -219,8 +196,6 @@ class MultiHeadAttentionChunk(MultiHeadAttention):
         mask:
             Mask to apply on scores before computing attention.
             One of ``'subsequent'``, None. Default is None.
-        EncoderDecoderで結局q,k,v=xになる
-        x :  (batch_size, seq_lne, d_model)
 
         Returns
         -------
@@ -229,21 +204,10 @@ class MultiHeadAttentionChunk(MultiHeadAttention):
         K = query.shape[1]
         n_chunk = K // self._chunk_size
 
-        ###############################################
-        # Conv MHA
-        # conv1dは(N,channel,Len)を要求するのでtransposeで対応した後に戻す
-        # (batch_size, seq_lne, d_model)->(N,channel,Len)_>(batch_size, seq_lne, d_model)
-        query = self.conv1d(query.transpose(1, 2)).transpose(1, 2)
-        key = self.conv1d(key.transpose(1, 2)).transpose(1, 2)
-        ###############################################
-
         # Compute Q, K and V, concatenate heads on batch dimension
-        queries = torch.cat( \
-            torch.cat(self._W_q(query).chunk(self._h, dim=-1), dim=0).chunk(n_chunk, dim=1), dim=0)
-        keys = torch.cat( \
-            torch.cat(self._W_k(key).chunk(self._h, dim=-1), dim=0).chunk(n_chunk, dim=1),dim=0)
-        values = torch.cat(\
-            torch.cat(self._W_v(value).chunk(self._h, dim=-1), dim=0).chunk(n_chunk, dim=1), dim=0)
+        queries = torch.cat(torch.cat(self._W_q(query).chunk(self._h, dim=-1), dim=0).chunk(n_chunk, dim=1), dim=0)
+        keys = torch.cat(torch.cat(self._W_k(key).chunk(self._h, dim=-1), dim=0).chunk(n_chunk, dim=1), dim=0)
+        values = torch.cat(torch.cat(self._W_v(value).chunk(self._h, dim=-1), dim=0).chunk(n_chunk, dim=1), dim=0)
 
         # Scaled Dot Product
         self._scores = torch.bmm(queries, keys.transpose(1, 2)) / np.sqrt(self._chunk_size)
@@ -321,9 +285,8 @@ class MultiHeadAttentionWindow(MultiHeadAttention):
         self._step = self._window_size - 2 * self._padding
 
         # Score mask for decoder
-        self._future_mask = nn.Parameter(
-            torch.triu(torch.ones((self._window_size, self._window_size)), diagonal=1).bool(),
-            requires_grad=False)
+        self._future_mask = nn.Parameter(torch.triu(torch.ones((self._window_size, self._window_size)), diagonal=1).bool(),
+                                         requires_grad=False)
 
         if self._attention_size is not None:
             self._attention_mask = nn.Parameter(generate_local_map_mask(self._window_size, self._attention_size),
@@ -369,12 +332,9 @@ class MultiHeadAttentionWindow(MultiHeadAttention):
         values = torch.cat(self._W_v(value).chunk(self._h, dim=-1), dim=0)
 
         # Divide Q, K and V using a moving window
-        queries = queries.unfold(dimension=1, size=self._window_size, step=self._step).reshape(
-            (-1, self._q, self._window_size)).transpose(1, 2)
-        keys = keys.unfold(dimension=1, size=self._window_size, step=self._step).reshape(
-            (-1, self._q, self._window_size)).transpose(1, 2)
-        values = values.unfold(dimension=1, size=self._window_size, step=self._step).reshape(
-            (-1, self._v, self._window_size)).transpose(1, 2)
+        queries = queries.unfold(dimension=1, size=self._window_size, step=self._step).reshape((-1, self._q, self._window_size)).transpose(1, 2)
+        keys = keys.unfold(dimension=1, size=self._window_size, step=self._step).reshape((-1, self._q, self._window_size)).transpose(1, 2)
+        values = values.unfold(dimension=1, size=self._window_size, step=self._step).reshape((-1, self._v, self._window_size)).transpose(1, 2)
 
         # Scaled Dot Product
         self._scores = torch.bmm(queries, keys.transpose(1, 2)) / np.sqrt(self._window_size)
@@ -393,9 +353,9 @@ class MultiHeadAttentionWindow(MultiHeadAttention):
         attention = torch.bmm(self._scores, values)
 
         # Fold chunks back
-        attention = attention.reshape((batch_size * self._h, -1, self._window_size, self._v))
+        attention = attention.reshape((batch_size*self._h, -1, self._window_size, self._v))
         attention = attention[:, :, self._padding:-self._padding, :]
-        attention = attention.reshape((batch_size * self._h, -1, self._v))
+        attention = attention.reshape((batch_size*self._h, -1, self._v))
 
         # Concatenat the heads
         attention_heads = torch.cat(attention.chunk(self._h, dim=0), dim=-1)

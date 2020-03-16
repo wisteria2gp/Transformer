@@ -50,14 +50,14 @@ class Transformer(nn.Module):
         Must be one of ``'original'``, ``'regular'`` or ``None``. Default is ``None``.
     """
 
-    def __init__(self,
-                 d_input: int,
-                 d_model: int,
-                 d_output: int,
-                 q: int,
-                 v: int,
-                 h: int,
-                 N: int,
+    def __init__(self,         # training.ipynbでは
+                 d_input: int, # 37(datasetのカラム数)
+                 d_model: int, # 64 Lattent dim
+                 d_output: int, # 8 (datasetのoutput側のカラム数)
+                 q: int, # 8
+                 v: int, # 8
+                 h: int, # 4
+                 N: int, # 4 tencoder-decoderの重ね回数
                  attention_size: int = None,
                  dropout: float = 0.3,
                  chunk_mode: bool = True,
@@ -108,6 +108,7 @@ class Transformer(nn.Module):
         ----------
         x:
             :class:`torch.Tensor` of shape (batch_size, K, d_input).
+            xを観察するに(batch_size , seq_len , dim)といった感じ。Kはおそらく系列長
 
         Returns
         -------
@@ -116,17 +117,17 @@ class Transformer(nn.Module):
         K = x.shape[1]
 
         # Embeddin module
-        encoding = self._embedding(x)
+        encoding = self._embedding(x) # ここでd_input->d_modelに変換(batch_size, seq_lne, d_model)
 
         # Add position encoding
         if self._generate_PE is not None:
             positional_encoding = self._generate_PE(K, self._d_model)
             positional_encoding = positional_encoding.to(encoding.device)
-            encoding.add_(positional_encoding)
+            encoding.add_(positional_encoding) # _addはそのまま足し算
 
         # Encoding stack
         for layer in self.layers_encoding:
-            encoding = layer(encoding)
+            encoding = layer(encoding) # encoding : (batch_size, seq_lne, d_model)
 
         # Decoding stack
         decoding = encoding

@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from tst.multiHeadAttention import MultiHeadAttention, MultiHeadAttentionChunk, MultiHeadAttentionWindow
+from tst.dummy_multiHeadAttention import MultiHeadAttention, MultiHeadAttentionChunk, MultiHeadAttentionWindow
 from tst.positionwiseFeedForward import PositionwiseFeedForward
 
 
@@ -67,6 +67,7 @@ class Encoder(nn.Module):
         self._dopout = nn.Dropout(p=dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # 入力はx=encoding : (batch_size, seq_lne, d_model)
         """Propagate the input through the Encoder block.
 
         Apply the Multi Head Attention block, add residual and normalize.
