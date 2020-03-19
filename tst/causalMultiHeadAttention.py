@@ -2,7 +2,11 @@
 
 
 ## もとのmultiHeadAttentionはdummy_multiHeadAttentionという名前にし
-## こちらはConvMHAにあたる。名前をすり替えることでtransformerやEncoder-Decoder側を帰ること無く動かしている
+## こちらはConvMHAにあたる。名前をすり替えることでtransformerやEncoder-Decoder側を変えること無く動かしている
+
+# 2020/03/17　causalMultiHeadAttention.pyにRename
+# EncoderDecoderにおけるSelf-Attentionにこのc_MHAを用い、Source-target Attには
+
 from typing import Optional
 
 import numpy as np
@@ -102,8 +106,8 @@ class MultiHeadAttention(nn.Module):
         # Conv MHA
         # conv1dは(N,channel,Len)を要求するのでtransposeで対応した後に戻す
         # (batch_size, seq_lne, d_model)->(N,channel,Len)_>(batch_size, seq_lne, d_model)
-        query = self.conv1d(query.transpose(1, 2)).transpose(1, 2)
-        key = self.conv1d(key.transpose(1, 2)).transpose(1, 2)
+        query = self.conv1d(query.transpose(1, 2))[:, :, :-self.conv1d.padding[0]].transpose(1, 2)
+        key = self.conv1d(key.transpose(1, 2))[:, :, :-self.conv1d.padding[0]].transpose(1, 2)
         ###############################################
 
         # Compute Q, K and V, concatenate heads on batch dimension
@@ -112,7 +116,7 @@ class MultiHeadAttention(nn.Module):
         values = torch.cat(self._W_v(value).chunk(self._h, dim=-1), dim=0)
 
         # Scaled Dot Product
-        self._scores = torch.bmm(queries, keys.transpose(1, 2)) / np.sqrt(K)  ##ここまちがってない？d_modelかshunk_sizeな気がする
+        self._scores = torch.bmm(queries, keys.transpose(1, 2)) / np.sqrt(K)  ##ここまちがってない？d_modelかchunk_sizeな気がする
 
         # Compute local map mask
         if self._attention_size is not None:
@@ -234,8 +238,8 @@ class MultiHeadAttentionChunk(MultiHeadAttention):
         # Conv MHA
         # conv1dは(N,channel,Len)を要求するのでtransposeで対応した後に戻す
         # (batch_size, seq_lne, d_model)->(N,channel,Len)_>(batch_size, seq_lne, d_model)
-        query = self.conv1d(query.transpose(1, 2)).transpose(1, 2)
-        key = self.conv1d(key.transpose(1, 2)).transpose(1, 2)
+        query = self.conv1d(query.transpose(1, 2))[:, :, :-self.conv1d.padding[0]].transpose(1, 2)
+        key = self.conv1d(key.transpose(1, 2))[:, :, :-self.conv1d.padding[0]].transpose(1, 2)
         ###############################################
 
         # Compute Q, K and V, concatenate heads on batch dimension

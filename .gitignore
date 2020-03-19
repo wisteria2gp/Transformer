@@ -8,6 +8,8 @@ build
 # Dataset
 *.npz
 *.csv
+BEMAC_datamake
+BEMAC_datamake/
 
 # Models
 *.pth
